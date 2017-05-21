@@ -4,7 +4,7 @@ Unit-tests for the Log Scraper library
 
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from StringIO import StringIO
+from io import StringIO
 import gzip
 import os
 import shutil

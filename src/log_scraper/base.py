@@ -31,7 +31,7 @@ from multiprocessing import Pool
 from operator import itemgetter
 import collections
 import contextlib
-import copy_reg
+import copyreg
 import gzip
 import logging
 import os
@@ -90,7 +90,7 @@ class RegexObject(object):
 
     def __str__(self):
         '''Pretty print info about self'''
-        return 'Pattern: {}, Groups: {}'.format(self._pattern, self._matcher.groupindex.keys())
+        return 'Pattern: {}, Groups: {}'.format(self._pattern, list(self._matcher.groupindex.keys()))
 
     def _create_matcher(self):
         '''
@@ -121,7 +121,7 @@ class RegexObject(object):
 
     def get_groups(self):
         '''Returns a list of all named groups found in the regex'''
-        return self._matcher.groupindex.keys()
+        return list(self._matcher.groupindex.keys())
 
 
 def _pickle_method(method):
@@ -131,12 +131,12 @@ def _pickle_method(method):
     pickle/unpickle the various LogScraper methods while
     processing files in parallel.
     '''
-    if method.im_self is None:
-        return getattr, (method.im_class, method.im_func.func_name)
+    if method.__self__ is None:
+        return getattr, (method.__self__.__class__, method.__func__.__name__)
     else:
-        return getattr, (method.im_self, method.im_func.func_name)
+        return getattr, (method.__self__, method.__func__.__name__)
 
-copy_reg.pickle(types.MethodType, _pickle_method)
+copyreg.pickle(types.MethodType, _pickle_method)
 
 class LogScraper(object):
     '''
@@ -262,15 +262,15 @@ class LogScraper(object):
             return None
 
         for result in results:
-            for regex_name, hits in result[LSC.REGEXES].items():
+            for regex_name, hits in list(result[LSC.REGEXES].items()):
                 self._combine_hits(hits, regex_hits[LSC.REGEXES][regex_name])
 
         #Sort the group data
-        for hits in regex_hits[LSC.REGEXES].values():
+        for hits in list(regex_hits[LSC.REGEXES].values()):
             if LSC.GROUP_HITS in hits:
-                for group, group_hits in hits[LSC.GROUP_HITS].items():
+                for group, group_hits in list(hits[LSC.GROUP_HITS].items()):
                     hits[LSC.GROUP_HITS][group] = \
-                        collections.OrderedDict(sorted(group_hits.iteritems()))
+                        collections.OrderedDict(sorted(group_hits.items()))
 
         if len(results) > 1:
             regex_hits[LSC.FILE_HITS] = results
@@ -316,7 +316,7 @@ class LogScraper(object):
         if regex_hits is None:
             return
         self._pretty_print(regex_hits[LSC.REGEXES], self._user_params, out)
-        for regex_name, hits in regex_hits[LSC.REGEXES].items():
+        for regex_name, hits in list(regex_hits[LSC.REGEXES].items()):
             out.write(self.COLORS['GREEN'])
             out.write('Total hits for regex {}: {:,}\n'.format(regex_name.capitalize(),
                                                                hits[LSC.TOTAL_HITS]))
@@ -337,7 +337,7 @@ class LogScraper(object):
         '''
         matches = self.get_regex_matches()
         for file_matches in matches:
-            for regex_name, regex_data in file_matches[LSC.REGEXES].items():
+            for regex_name, regex_data in list(file_matches[LSC.REGEXES].items()):
                 out.write('Regex: {}\n'.format(regex_name))
                 out.write('Matches:\n')
                 if regex_data[LSC.MATCHES] == []:
@@ -383,7 +383,7 @@ class LogScraper(object):
         '''
         if opt is None:
             opt = {}
-        for param, default in LSC.OPTIONAL_PARAMS.items():
+        for param, default in list(LSC.OPTIONAL_PARAMS.items()):
             self._optional_params[param] = opt.get(param, default)
 
 # Methods you should implement for your own scraper
@@ -431,9 +431,9 @@ class LogScraper(object):
         if items is None or len(items) == 0:
             return ret_dict
 
-        max_key, max_count = max(items.iteritems(), key=itemgetter(1))
-        min_key, min_count = min(items.iteritems(), key=itemgetter(1))
-        total = sum(items.itervalues())
+        max_key, max_count = max(iter(items.items()), key=itemgetter(1))
+        min_key, min_count = min(iter(items.items()), key=itemgetter(1))
+        total = sum(items.values())
         count = len(items)
 
         avg_count = float(total)/count
@@ -453,7 +453,7 @@ class LogScraper(object):
         into combining_dict
         '''
 
-        for group, hits in match_groups.items():
+        for group, hits in list(match_groups.items()):
             if isinstance(hits, collections.Mapping):
                 cls._combine_hits(match_groups[group], combining_dict[group])
             else:
@@ -648,7 +648,7 @@ class LogScraper(object):
                 # the interrupt immediately.
                 # See: http://stackoverflow.com/questions/1408356/keyboard-interrupts-with-pythons-multiprocessing-pool
                 file_list = pool.map_async(self._get_log_file, self._file_list).get(TIMEOUT)
-                self._file_list = sorted(filter(lambda x: x != '', file_list))
+                self._file_list = sorted([x for x in file_list if x != ''])
                 pool = None
 
         LOGGER.debug('Final file list: %s', self._file_list)
@@ -690,9 +690,9 @@ class LogScraper(object):
 
         out.write(cls.COLORS["BLUE"])
         if options.get(LSC.DEBUG):
-            for regex_name, hits in result.items():
+            for regex_name, hits in list(result.items()):
                 regex_name = regex_name.capitalize()
-                for group, group_hits in hits[LSC.GROUP_HITS].items():
+                for group, group_hits in list(hits[LSC.GROUP_HITS].items()):
                     if group == LSC.TOTAL_HITS:
                         continue
                     out.write('\n{} hits per {}:\n'.format(regex_name, group.capitalize()))
@@ -711,18 +711,18 @@ class LogScraper(object):
         '''
         if results is None:
             return
-        for key, val in results.iteritems():
-            print "{} : {}\n".format(key, val)
+        for key, val in results.items():
+            print("{} : {}\n".format(key, val))
 
     @classmethod
     def _print_max_min_avg(cls, group, stats):
         '''Prints the min, max and average stats'''
-        print '\nAggregator: {}\n'.format(group)
-        print '\nMax requests processed : {:,}, stat value: {}\n'.format(stats[LSC.MAX_COUNT],
-                                                                         stats[LSC.MAX_KEY])
-        print 'Min requests processed : {:,}, stat value: {}\n'.format(stats[LSC.MIN_COUNT],
-                                                                       stats[LSC.MIN_KEY])
-        print 'Average requests processed : {:,}\n'.format(stats[LSC.AVG_COUNT])
+        print('\nAggregator: {}\n'.format(group))
+        print('\nMax requests processed : {:,}, stat value: {}\n'.format(stats[LSC.MAX_COUNT],
+                                                                         stats[LSC.MAX_KEY]))
+        print('Min requests processed : {:,}, stat value: {}\n'.format(stats[LSC.MIN_COUNT],
+                                                                       stats[LSC.MIN_KEY]))
+        print('Average requests processed : {:,}\n'.format(stats[LSC.AVG_COUNT]))
 
     def _print_regex_patterns(self):
         '''Prints all the regex patterns'''
@@ -770,10 +770,10 @@ class LogScraper(object):
                                                        regex.get_matcher(),
                                                        group_hits)
         #Sort the group data
-        for hits in regex_hits[LSC.REGEXES].values():
-            for group, group_hits in hits[LSC.GROUP_HITS].items():
+        for hits in list(regex_hits[LSC.REGEXES].values()):
+            for group, group_hits in list(hits[LSC.GROUP_HITS].items()):
                 hits[LSC.GROUP_HITS][group] = \
-                    collections.OrderedDict(sorted(group_hits.iteritems()))
+                    collections.OrderedDict(sorted(group_hits.items()))
 
         return regex_hits
 
@@ -788,7 +788,7 @@ class LogScraper(object):
         try:
             match = matcher.match(line)
             if match is not None:
-                for agg_key, agg_dict in aggregators.items():
+                for agg_key, agg_dict in list(aggregators.items()):
                     cls._sum_group_matches(agg_dict, match, agg_key)
                 return 1
         except AttributeError as err:
